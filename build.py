@@ -973,7 +973,8 @@ RUN pip3 install --upgrade pip \\
           wheel \\
           setuptools \\
           docker \\
-          virtualenv
+          virtualenv \\
+          psutil
 
 # Install boost version >= 1.78 for boost::span
 # Current libboost-dev apt packages are < 1.78, so install from tar.gz
@@ -1090,7 +1091,8 @@ RUN apt-get update \\
 
 RUN pip3 install --upgrade \\
           docker \\
-          virtualenv
+          virtualenv \\
+          psutil
 
 # Install boost version >= 1.78 for boost::span
 # Current libboost-dev apt packages are < 1.78, so install from tar.gz
