@@ -217,7 +217,7 @@ metrics are used for latencies:
 
 |Category      |Metric          |Metric Name |Description                |Granularity|Frequency    |Model Type
 |--------------|----------------|------------|---------------------------|-----------|-------------|-------------|
-|Latency       |Request to First Response Time    |`nv_inference_first_response_histogram_ms` |Histogram of end-to-end inference request to the first response time |Per model  |Per request  | Decoupled |
+|Latency       |Time to First Response    |`nv_inference_first_response_histogram_ms` |Histogram of end-to-end inference request to the first response time |Per model  |Per request  | Decoupled |
 
 To enable these metrics specifically, you can set `--metrics-config histogram_latencies=true`
 
