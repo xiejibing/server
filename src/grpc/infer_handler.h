@@ -1,4 +1,4 @@
-// Copyright 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2023-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -102,9 +102,9 @@ struct RequestReleasePayload final {
 //
 // ResponseQueue
 //
-// A simple queue holding the responses to be written. Uses a
-// vector of persistent message objects to prevent allocating
-// memory for each response to be written.
+// This class implements a queue to manage responses that need to be written.
+// It internally uses a reusable pool of persistent message objects to avoid
+// allocating memory for each response individually.
 //
 template <typename ResponseType>
 class ResponseQueue {
@@ -113,20 +113,51 @@ class ResponseQueue {
 
   ~ResponseQueue()
   {
+    // Delete all responses in the reusable pool
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::~ResponseQueue() "
+                   << ", ready_count_: " << ready_count_
+                   << ", alloc_count_: " << alloc_count_
+                   << ", pop_count_: " << pop_count_
+                   << " ------------ responses_.size(): " << responses_.size()
+                   << " reusable_pool_.size(): " << reusable_pool_.size();
+
+    for (auto response : reusable_pool_) {
+      delete response;
+    }
+
+    // Delete all responses currently in the queue
     for (auto response : responses_) {
       delete response;
     }
+
+    LOG_VERBOSE(2) << " -----------------------------------------";
   }
 
-  // Resets the queue
+  // Resets the queue to its initial state
   void Reset()
   {
+    std::lock_guard<std::mutex> lock(mtx_);
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::Reset() "
+                   << ", ready_count_: " << ready_count_
+                   << ", alloc_count_: " << alloc_count_
+                   << ", pop_count_: " << pop_count_
+                   << " ------------ responses_.size(): " << responses_.size()
+                   << " reusable_pool_.size(): " << reusable_pool_.size();
+
     alloc_count_ = 0;
     ready_count_ = 0;
-    current_index_ = 0;
-    for (auto response : responses_) {
-      response->Clear();
+    pop_count_ = 0;
+
+    while (!responses_.empty()) {
+      responses_.front()->Clear();
+      reusable_pool_.push_back(responses_.front());
+      responses_.pop_front();
     }
+
+    LOG_VERBOSE(2) << "----- after responses_.size(): " << responses_.size();
+    LOG_VERBOSE(2) << "----- after reusable_pool_.size(): "
+                   << reusable_pool_.size();
+    LOG_VERBOSE(2) << " -----------------------------------------";
   }
 
   // Gets the response for the non-decoupled models.
@@ -137,31 +168,73 @@ class ResponseQueue {
     std::lock_guard<std::mutex> lock(mtx_);
     alloc_count_ = 1;
     if (responses_.size() < 1) {
-      responses_.push_back(new ResponseType());
+      if (!reusable_pool_.empty()) {
+        responses_.push_back(reusable_pool_.front());
+        reusable_pool_.pop_front();
+      } else {
+        responses_.push_back(new ResponseType());
+      }
     }
+    return responses_[0];
+
+    LOG_VERBOSE(2)
+        << " --------------- ResponseQueue::GetNonDecoupledResponse() "
+        << ", ready_count_: " << ready_count_
+        << ", alloc_count_: " << alloc_count_ << ", pop_count_: " << pop_count_
+        << " ------------ responses_.size(): " << responses_.size()
+        << " reusable_pool_.size(): " << reusable_pool_.size();
+
     return responses_[0];
   }
 
-  // Allocates a response on the head of the queue
+  // Allocates a response at the end of the queue
   void AllocateResponse()
   {
-    std::lock_guard<std::mutex> lock(mtx_);
+    std::unique_lock<std::mutex> lock(mtx_);
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::AllocateResponse() -  "
+                      "before allocation ------------ "
+                      "responses_.size(): "
+                   << responses_.size()
+                   << " reusable_pool_.size(): " << reusable_pool_.size();
+    cv_.wait(lock, [this] { return responses_.size() < threshold_; });
     alloc_count_++;
-    if (responses_.size() < alloc_count_) {
+
+    // Use a response from the reusable pool if available
+    if (!reusable_pool_.empty()) {
+      responses_.push_back(reusable_pool_.front());
+      reusable_pool_.pop_front();
+      LOG_VERBOSE(2) << " --------------- reusing the response ---------";
+    } else {
       responses_.push_back(new ResponseType());
+      LOG_VERBOSE(2) << " --------------- allocated new response ---------";
     }
+
+    LOG_VERBOSE(2) << "------ ready_count_: " << ready_count_
+                   << ", alloc_count_: " << alloc_count_
+                   << ", pop_count_: " << pop_count_
+                   << " ------------ responses_.size(): " << responses_.size()
+                   << " reusable_pool_.size(): " << reusable_pool_.size();
   }
 
   // Gets the last allocated response
   ResponseType* GetLastAllocatedResponse()
   {
     std::lock_guard<std::mutex> lock(mtx_);
-    if (responses_.size() < alloc_count_) {
+    LOG_VERBOSE(2)
+        << " --------------- ResponseQueue::GetLastAllocatedResponse() "
+        << ", ready_count_: " << ready_count_
+        << ", alloc_count_: " << alloc_count_ << ", pop_count_: " << pop_count_
+        << " ------------ responses_.size(): " << responses_.size()
+        << " reusable_pool_: " << reusable_pool_.size();
+
+    // Ensure that the requested response has been allocated
+    if ((responses_.size() + pop_count_) < alloc_count_) {
       LOG_ERROR
           << "[INTERNAL] Attempting to access the response not yet allocated";
       return nullptr;
     }
-    return responses_[alloc_count_ - 1];
+
+    return responses_.back();
   }
 
   // Marks the next non-ready response complete
@@ -175,46 +248,109 @@ class ResponseQueue {
     }
     ready_count_++;
 
+    LOG_VERBOSE(2)
+        << " --------------- ResponseQueue::MarkNextResponseComplete() - "
+        << ", ready_count_: " << ready_count_
+        << ", alloc_count_: " << alloc_count_ << ", pop_count_: " << pop_count_
+        << " ------------ responses_.size(): " << responses_.size()
+        << " reusable_pool_.size(): " << reusable_pool_.size();
+
     return true;
   }
 
-  // Gets the current response from the tail of
-  // the queue.
+  // Gets the current response from the front of the queue
   ResponseType* GetCurrentResponse()
   {
     std::lock_guard<std::mutex> lock(mtx_);
-    if (current_index_ >= ready_count_) {
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::GetCurrentResponse() - "
+                   << ", ready_count_: " << ready_count_
+                   << ", alloc_count_: " << alloc_count_
+                   << ", pop_count_: " << pop_count_
+                   << " ------------ responses_.size(): " << responses_.size()
+                   << " reusable_pool_.size(): " << reusable_pool_.size();
+
+    if (pop_count_ >= ready_count_) {
       LOG_ERROR << "[INTERNAL] Attempting to access current response when it "
                    "is not ready";
       return nullptr;
     }
-    return responses_[current_index_];
+    if (responses_.empty()) {
+      LOG_ERROR << "[INTERNAL] No responses are available in the queue.";
+      return nullptr;
+    }
+
+    return responses_.front();
   }
 
   // Gets the response at the specified index
   ResponseType* GetResponseAt(const uint32_t index)
   {
     std::lock_guard<std::mutex> lock(mtx_);
+    LOG_VERBOSE(2)
+        << " --------------- ResponseQueue::GetResponseAt()  - index: " << index
+        << ", ready_count_: " << ready_count_
+        << ", alloc_count_: " << alloc_count_ << ", pop_count_: " << pop_count_
+        << " ------------ responses_.size(): " << responses_.size()
+        << " reusable_pool_.size(): " << reusable_pool_.size();
+
+    // Check if the index is valid for allocated responses
     if (index >= alloc_count_) {
       LOG_ERROR << "[INTERNAL] Attempting to access response which is not yet "
                    "allocated";
       return nullptr;
     }
-    return responses_[index];
+    if (index < pop_count_) {
+      LOG_ERROR << "[INTERNAL] Attempting to access a response that has "
+                   "already been removed from the queue.";
+      return nullptr;
+    }
+
+    // Adjust index based on number of popped responses to get actual index in
+    // 'responses_'
+    return responses_[index - pop_count_];
   }
 
-  // Pops the response from the tail of the queue
+  // Removes the current response from the front of the queue
   void PopResponse()
   {
     std::lock_guard<std::mutex> lock(mtx_);
-    current_index_++;
+
+    // Ensure there are responses in the queue to pop
+    if (responses_.empty()) {
+      LOG_ERROR << "[INTERNAL] No responses in the queue to pop.";
+      return;
+    }
+
+    // Clear and move the current response to the reusable pool
+    auto response = responses_.front();
+    response->Clear();
+    reusable_pool_.push_back(response);
+    responses_.pop_front();
+    pop_count_++;
+
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::PopResponse() "
+                   << ", ready_count_: " << ready_count_
+                   << ", alloc_count_: " << alloc_count_
+                   << ", pop_count_: " << pop_count_
+                   << " ------------ responses_.size(): " << responses_.size()
+                   << " reusable_pool_.size(): " << reusable_pool_.size();
+
+    cv_.notify_one();
   }
 
   // Returns whether the queue is empty
   bool IsEmpty()
   {
     std::lock_guard<std::mutex> lock(mtx_);
-    return ((alloc_count_ == ready_count_) && (alloc_count_ == current_index_));
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::IsEmpty() ------------  "
+                   << ", ready_count_: " << ready_count_
+                   << ", alloc_count_: " << alloc_count_
+                   << ", pop_count_: " << pop_count_
+                   << " ------------ responses_.size(): " << responses_.size()
+                   << " reusable_pool_.size(): " << reusable_pool_.size();
+    return (
+        (alloc_count_ == ready_count_) && (alloc_count_ == pop_count_) &&
+        responses_.empty());
   }
 
   // Returns whether the queue has responses
@@ -222,20 +358,29 @@ class ResponseQueue {
   bool HasReadyResponse()
   {
     std::lock_guard<std::mutex> lock(mtx_);
-    return (ready_count_ > current_index_);
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::HasReadyResponse() "
+                   << ", ready_count_: " << ready_count_
+                   << ", alloc_count_: " << alloc_count_
+                   << ", pop_count_: " << pop_count_
+                   << " ------------ responses_.size(): " << responses_.size()
+                   << " reusable_pool_.size(): " << reusable_pool_.size();
+    return (ready_count_ > pop_count_);
   }
 
  private:
-  std::vector<ResponseType*> responses_;
+  // Stores responses that need to be written. The front of the queue indicates
+  // the current response, while the back indicates the last allocated response.
+  std::deque<ResponseType*> responses_;
+  // Stores completed responses that can be reused
+  std::deque<ResponseType*> reusable_pool_;
+  std::condition_variable cv_;
   std::mutex mtx_;
 
-  // There are three indices to track the responses in the queue
-  // Tracks the allocated response
-  uint32_t alloc_count_;
-  // Tracks the response that is ready to be written
-  uint32_t ready_count_;
-  // Tracks the response next in the queue to be written
-  uint32_t current_index_;
+  // Three counters are used to track and manage responses in the queue
+  uint32_t alloc_count_;  // Number of allocated responses
+  uint32_t ready_count_;  // Number of ready-to-write responses
+  uint32_t pop_count_;    // Number of removed responses from the queue
+  uint32_t threshold_ = 10;
 };
 
 
@@ -1122,6 +1267,8 @@ class InferHandlerState {
   void Reset(
       const std::shared_ptr<Context>& context, Steps start_step = Steps::START)
   {
+    LOG_VERBOSE(2)
+        << "**************** InferHandlerState::Reset() ******************";
     unique_id_ = NEXT_UNIQUE_ID;
     context_ = context;
     step_ = start_step;
@@ -1145,6 +1292,7 @@ class InferHandlerState {
   {
     context_ = nullptr;
     inference_request_.reset();
+    LOG_VERBOSE(2) << "----   inference_request_: " << inference_request_;
     ClearTraceTimestamps();
   }
 
@@ -1261,12 +1409,20 @@ class InferHandler : public HandlerBase {
       const std::shared_ptr<StateContext>& context,
       Steps start_step = Steps::START)
   {
+    LOG_VERBOSE(2)
+        << "**************** InferHandler::StateNew() ******************";
     State* state = nullptr;
 
     if (max_state_bucket_count_ > 0) {
+      LOG_VERBOSE(2)
+          << "       ---  Inside  if condition 1 - max_state_bucket_count_: "
+          << max_state_bucket_count_ << "  ----";
       std::lock_guard<std::mutex> lock(alloc_mu_);
 
       if (!state_bucket_.empty()) {
+        LOG_VERBOSE(2)
+            << "       ---  Inside  if condition 2 - !state_bucket_.empty()): "
+            << !state_bucket_.empty() << "  ----";
         state = state_bucket_.back();
         state->Reset(context, start_step);
         state_bucket_.pop_back();
@@ -1275,6 +1431,8 @@ class InferHandler : public HandlerBase {
 
     if (state == nullptr) {
       state = new State(tritonserver, context, start_step);
+      LOG_VERBOSE(2) << "-----  New state created id: " << state->unique_id_
+                     << " Step " << state->step_;
     }
 
     if (start_step == Steps::START) {
@@ -1287,6 +1445,8 @@ class InferHandler : public HandlerBase {
     LOG_VERBOSE(2) << "StateNew, " << state->unique_id_ << " Step "
                    << state->step_;
 
+    LOG_VERBOSE(2) << "************************** end of "
+                      "InferHandler::StateNew() **************************";
     return state;
   }
 
@@ -1294,10 +1454,19 @@ class InferHandler : public HandlerBase {
   {
     LOG_VERBOSE(2) << "StateRelease, " << state->unique_id_ << " Step "
                    << state->step_;
+    LOG_VERBOSE(2)
+        << "**************** InferHandler::StateRelease() ******************";
+
     if (max_state_bucket_count_ > 0) {
+      LOG_VERBOSE(2)
+          << "       ---  Inside  if condition 1 - max_state_bucket_count_: "
+          << max_state_bucket_count_ << "  ----";
       std::lock_guard<std::mutex> lock(alloc_mu_);
 
       if (state_bucket_.size() < max_state_bucket_count_) {
+        LOG_VERBOSE(2)
+            << "       ---  Inside  if condition 2 - state_bucket_.size(): "
+            << state_bucket_.size() << "  ----";
         state->Release();
         state_bucket_.push_back(state);
         return;
@@ -1305,6 +1474,8 @@ class InferHandler : public HandlerBase {
     }
 
     delete state;
+    LOG_VERBOSE(2) << "************************** end of "
+                      "InferHandler::StateRelease() **************************";
   }
 
   // Simple structure that carries the payload needed for
