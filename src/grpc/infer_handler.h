@@ -109,7 +109,11 @@ struct RequestReleasePayload final {
 template <typename ResponseType>
 class ResponseQueue {
  public:
-  explicit ResponseQueue() { Reset(); }
+  explicit ResponseQueue(const int threshold) : threshold_(threshold)
+  {
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::ResponseQueue() " << ", threshold: " << threshold << ", threshold_: " << threshold_;
+    Reset();
+  }
 
   ~ResponseQueue()
   {
@@ -175,7 +179,6 @@ class ResponseQueue {
         responses_.push_back(new ResponseType());
       }
     }
-    return responses_[0];
 
     LOG_VERBOSE(2)
         << " --------------- ResponseQueue::GetNonDecoupledResponse() "
