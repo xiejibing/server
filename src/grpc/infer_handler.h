@@ -109,9 +109,9 @@ struct RequestReleasePayload final {
 template <typename ResponseType>
 class ResponseQueue {
  public:
-  explicit ResponseQueue(const int threshold) : threshold_(threshold)
+  explicit ResponseQueue(const size_t max_response_queue_size) : max_response_queue_size_(max_response_queue_size)
   {
-    LOG_VERBOSE(2) << " --------------- ResponseQueue::ResponseQueue() " << ", threshold: " << threshold << ", threshold_: " << threshold_;
+    LOG_VERBOSE(2) << " --------------- ResponseQueue::ResponseQueue() " << ", max_response_queue_size: " << max_response_queue_size << ", max_response_queue_size_: " << max_response_queue_size_;
     Reset();
   }
 
@@ -199,7 +199,7 @@ class ResponseQueue {
                       "responses_.size(): "
                    << responses_.size()
                    << " reusable_pool_.size(): " << reusable_pool_.size();
-    cv_.wait(lock, [this] { return responses_.size() < threshold_; });
+    cv_.wait(lock, [this] { return responses_.size() < max_response_queue_size_; });
     alloc_count_++;
 
     // Use a response from the reusable pool if available
@@ -377,13 +377,13 @@ class ResponseQueue {
   // Stores completed responses that can be reused
   std::deque<ResponseType*> reusable_pool_;
   std::condition_variable cv_;
+  size_t max_response_queue_size_;
   std::mutex mtx_;
 
   // Three counters are used to track and manage responses in the queue
   uint32_t alloc_count_;  // Number of allocated responses
   uint32_t ready_count_;  // Number of ready-to-write responses
   uint32_t pop_count_;    // Number of removed responses from the queue
-  uint32_t threshold_ = 10;
 };
 
 
@@ -1218,7 +1218,7 @@ class InferHandlerState {
   }
 
   explicit InferHandlerState(
-      TRITONSERVER_Server* tritonserver,
+      TRITONSERVER_Server* tritonserver, const size_t max_response_queue_size,
       const std::shared_ptr<Context>& context, Steps start_step = Steps::START)
       : tritonserver_(tritonserver), async_notify_state_(false)
   {
@@ -1232,7 +1232,8 @@ class InferHandlerState {
     delay_response_completion_ms_ =
         ParseDebugVariable("TRITONSERVER_DELAY_RESPONSE_COMPLETION");
 
-    response_queue_.reset(new ResponseQueue<ResponseType>());
+    response_queue_.reset(
+        new ResponseQueue<ResponseType>(max_response_queue_size));
     Reset(context, start_step);
   }
 
@@ -1388,7 +1389,7 @@ class InferHandler : public HandlerBase {
       const std::string& name,
       const std::shared_ptr<TRITONSERVER_Server>& tritonserver,
       ServiceType* service, ::grpc::ServerCompletionQueue* cq,
-      size_t max_state_bucket_count,
+      size_t max_state_bucket_count, size_t max_response_queue_size,
       std::pair<std::string, std::string> restricted_kv,
       const std::string& header_forward_pattern);
   virtual ~InferHandler();
@@ -1433,7 +1434,8 @@ class InferHandler : public HandlerBase {
     }
 
     if (state == nullptr) {
-      state = new State(tritonserver, context, start_step);
+      state = new State(
+          tritonserver, max_response_queue_size_, context, start_step);
       LOG_VERBOSE(2) << "-----  New state created id: " << state->unique_id_
                      << " Step " << state->step_;
     }
@@ -1549,6 +1551,7 @@ class InferHandler : public HandlerBase {
   const size_t max_state_bucket_count_;
   std::vector<State*> state_bucket_;
 
+  const size_t max_response_queue_size_;
   std::pair<std::string, std::string> restricted_kv_;
   std::string header_forward_pattern_;
   re2::RE2 header_forward_regex_;
@@ -1562,11 +1565,12 @@ InferHandler<ServiceType, ServerResponderType, RequestType, ResponseType>::
         const std::string& name,
         const std::shared_ptr<TRITONSERVER_Server>& tritonserver,
         ServiceType* service, ::grpc::ServerCompletionQueue* cq,
-        size_t max_state_bucket_count,
+        size_t max_state_bucket_count, size_t max_response_queue_size,
         std::pair<std::string, std::string> restricted_kv,
         const std::string& header_forward_pattern)
     : name_(name), tritonserver_(tritonserver), service_(service), cq_(cq),
       max_state_bucket_count_(max_state_bucket_count),
+      max_response_queue_size_(max_response_queue_size),
       restricted_kv_(restricted_kv),
       header_forward_pattern_(header_forward_pattern),
       header_forward_regex_(header_forward_pattern_)
@@ -1722,12 +1726,12 @@ class ModelInferHandler
       const std::shared_ptr<SharedMemoryManager>& shm_manager,
       inference::GRPCInferenceService::AsyncService* service,
       ::grpc::ServerCompletionQueue* cq, size_t max_state_bucket_count,
-      grpc_compression_level compression_level,
+      size_t max_response_queue_size, grpc_compression_level compression_level,
       std::pair<std::string, std::string> restricted_kv,
       const std::string& forward_header_pattern)
       : InferHandler(
             name, tritonserver, service, cq, max_state_bucket_count,
-            restricted_kv, forward_header_pattern),
+            max_response_queue_size, restricted_kv, forward_header_pattern),
         trace_manager_(trace_manager), shm_manager_(shm_manager),
         compression_level_(compression_level)
   {
