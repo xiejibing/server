@@ -109,7 +109,8 @@ struct RequestReleasePayload final {
 template <typename ResponseType>
 class ResponseQueue {
  public:
-  explicit ResponseQueue(const size_t max_response_queue_size) : max_response_queue_size_(max_response_queue_size)
+  explicit ResponseQueue(const size_t max_response_queue_size)
+      : max_response_queue_size_(max_response_queue_size)
   {
     LOG_VERBOSE(2) << " --------------- ResponseQueue::ResponseQueue() " << ", max_response_queue_size: " << max_response_queue_size << ", max_response_queue_size_: " << max_response_queue_size_;
     Reset();
