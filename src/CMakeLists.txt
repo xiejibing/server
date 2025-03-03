@@ -41,17 +41,17 @@ include(FetchContent)
 FetchContent_Declare(
   repo-common
   GIT_REPOSITORY ${TRITON_REPO_ORGANIZATION}/common.git
-  GIT_TAG ${TRITON_COMMON_REPO_TAG}
+  GIT_TAG "r24.09"
 )
 FetchContent_Declare(
   repo-core
   GIT_REPOSITORY ${TRITON_REPO_ORGANIZATION}/core.git
-  GIT_TAG ${TRITON_CORE_REPO_TAG}
+  GIT_TAG "spolisetty_24.09_riva_test"
 )
 FetchContent_Declare(
   repo-backend
   GIT_REPOSITORY ${TRITON_REPO_ORGANIZATION}/backend.git
-  GIT_TAG ${TRITON_BACKEND_REPO_TAG}
+  GIT_TAG r24.09
 )
 
 if(TRITON_ENABLE_GRPC)
