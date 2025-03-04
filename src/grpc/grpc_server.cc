@@ -2367,7 +2367,7 @@ Server::Server(
           std::to_string(keepalive_options.max_connection_age_grace_ms_)};
       table_printer.InsertRow(row);
     }
-    LOG_TABLE_VERBOSE(1, table_printer);
+    //LOG_TABLE_VERBOSE(1, table_printer);
   }
 
   common_cq_ = builder_.AddCompletionQueue();
