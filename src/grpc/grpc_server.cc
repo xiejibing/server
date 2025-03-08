@@ -62,7 +62,7 @@
 #include "../tracer.h"
 #endif  // TRITON_ENABLE_TRACING
 
-#define REGISTER_GRPC_INFER_THREAD_COUNT 2
+#define REGISTER_GRPC_INFER_THREAD_COUNT 6
 
 namespace triton { namespace server { namespace grpc {
 
