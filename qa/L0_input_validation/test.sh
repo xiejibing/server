@@ -56,7 +56,7 @@ export CUDA_VISIBLE_DEVICES=0
 rm -fr *.log
 
 # input_validation_test
-SERVER_ARGS="--model-repository=`pwd`/models"
+SERVER_ARGS="--model-repository=`pwd`/models --log-verbose=2"
 run_server
 if [ "$SERVER_PID" == "0" ]; then
     echo -e "\n***\n*** Failed to start $SERVER\n***"
