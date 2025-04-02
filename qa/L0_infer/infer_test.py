@@ -672,7 +672,7 @@ class InferTest(tu.TestResultCollector):
 
         # There are 3 versions of onnx_int8_int8_int8 but
         # only version 3 should be available
-        for platform in ("onnx"):
+        for platform in ["onnx"]:
             print(f"[DEBUG] - platform: {platform}")
             if platform not in BACKENDS:
                 continue
@@ -736,7 +736,7 @@ class InferTest(tu.TestResultCollector):
 
         # There are 3 versions of onnx_int16_int16_int16 but only
         # versions 2 and 3 should be available
-        for platform in ("onnx"):
+        for platform in ["onnx"]:
             print(f"[DEBUG] - platform: {platform}")
             if platform not in BACKENDS:
                 continue
@@ -796,7 +796,7 @@ class InferTest(tu.TestResultCollector):
 
         # There are 3 versions of *_int32_int32_int32 and all should
         # be available.
-        for platform in ("onnx"):
+        for platform in ["onnx"]:
             print(f"[DEBUG] - platform: {platform}")
             if platform not in BACKENDS:
                 continue
@@ -852,7 +852,7 @@ class InferTest(tu.TestResultCollector):
 
         # There are 3 versions of *_float16_float16_float16 but only
         # version 1 should be available.
-        for platform in ("onnx"):
+        for platform in ["onnx"]:
             print(f"[DEBUG] - platform: {platform}")
             if platform not in BACKENDS:
                 continue
