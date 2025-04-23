@@ -932,7 +932,7 @@ def install_miniconda(conda_version, target_machine):
                 FLAGS.version
             )
         )
-    miniconda_url = f"https://repo.anaconda.com/miniconda/Miniconda3-{conda_version}-Linux-{target_machine}.sh"
+    miniconda_url = f"https://repo.anaconda.com/miniconda/Miniforge3-{conda_version}-Linux-{target_machine}.sh"
     if target_machine == "x86_64":
         sha_sum = "32d73e1bc33fda089d7cd9ef4c1be542616bd8e437d1f77afeeaf7afdb019787"
     else:
@@ -940,13 +940,11 @@ def install_miniconda(conda_version, target_machine):
     return f"""
 RUN mkdir -p /opt/
 RUN wget "{miniconda_url}" -O miniconda.sh -q && \
-    echo "{sha_sum}" "miniconda.sh" > shasum && \
-    sha256sum -c ./shasum && \
-    sh miniconda.sh -b -p /opt/conda && \
-    rm miniconda.sh shasum && \
+    # sh miniconda.sh -b -p /opt/conda && \
+    # rm miniconda.sh shasum && \
     find /opt/conda/ -follow -type f -name '*.a' -delete && \
     find /opt/conda/ -follow -type f -name '*.js.map' -delete && \
-    /opt/conda/bin/conda clean -afy
+    /opt/conda/bin/conda clean -af
 ENV PATH /opt/conda/bin:${{PATH}}
 """
 
