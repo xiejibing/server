@@ -77,7 +77,8 @@ TRITON_VERSION_MAP = {
         "2023.0.0",  # ORT OpenVINO
         "2023.0.0",  # Standalone OpenVINO
         "2.4.7",  # DCGM version
-        "py310_23.1.0-1",  # Conda version
+        # "py310_23.1.0-1",  # Conda version
+        "23.1.0-1",  # Conda version
         "0.2.0",  # vLLM version
     )
 }
@@ -932,7 +933,7 @@ def install_miniconda(conda_version, target_machine):
                 FLAGS.version
             )
         )
-    miniconda_url = f"https://repo.anaconda.com/miniconda/Miniforge3-{conda_version}-Linux-{target_machine}.sh"
+    miniconda_url = f"https://github.com/conda-forge/miniforge/releases/download/${conda_version}/Miniforge3-{conda_version}-Linux-{target_machine}.sh"
     if target_machine == "x86_64":
         sha_sum = "32d73e1bc33fda089d7cd9ef4c1be542616bd8e437d1f77afeeaf7afdb019787"
     else:
