@@ -933,7 +933,7 @@ def install_miniconda(conda_version, target_machine):
                 FLAGS.version
             )
         )
-    miniconda_url = f"https://github.com/conda-forge/miniforge/releases/download/${conda_version}/Miniforge3-{conda_version}-Linux-{target_machine}.sh"
+    miniconda_url = f"https://github.com/conda-forge/miniforge/releases/download/{conda_version}/Miniforge3-{conda_version}-Linux-{target_machine}.sh"
     if target_machine == "x86_64":
         sha_sum = "32d73e1bc33fda089d7cd9ef4c1be542616bd8e437d1f77afeeaf7afdb019787"
     else:
