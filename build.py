@@ -941,8 +941,8 @@ def install_miniconda(conda_version, target_machine):
     return f"""
 RUN mkdir -p /opt/
 RUN wget "{miniconda_url}" -O miniconda.sh -q && \
-    # sh miniconda.sh -b -p /opt/conda && \
-    # rm miniconda.sh shasum && \
+    sh miniconda.sh -b -p /opt/conda && \
+    rm miniconda.sh && \
     find /opt/conda/ -follow -type f -name '*.a' -delete && \
     find /opt/conda/ -follow -type f -name '*.js.map' -delete && \
     /opt/conda/bin/conda clean -af
