@@ -2090,13 +2090,13 @@ def finalize_build(cmake_script, install_dir, ci_dir):
 def enable_all():
     if target_platform() != "windows":
         all_backends = [
-            "ensemble",
-            "identity",
-            "square",
-            "repeat",
-            "tensorflow",
-            "onnxruntime",
-            "python",
+            # "ensemble",
+            # "identity",
+            # "square",
+            # "repeat",
+            # "tensorflow",
+            # "onnxruntime",
+            # "python",
             "dali",
             "pytorch",
             "openvino",
@@ -2771,7 +2771,7 @@ if __name__ == "__main__":
             # If armnn_tflite backend, source from external repo for git clone
             if be == "armnn_tflite":
                 github_organization = "https://gitlab.com/arm-research/smarter/"
-            elif be in ["onnxruntime", "python"]:
+            elif be in ["onnxruntime", "python", "dali"]:
                 github_organization = "https://github.com/xiejibing"
             else:
                 github_organization = FLAGS.github_organization
