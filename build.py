@@ -2681,6 +2681,8 @@ if __name__ == "__main__":
             # If armnn_tflite backend, source from external repo for git clone
             if be == "armnn_tflite":
                 github_organization = "https://gitlab.com/arm-research/smarter/"
+            elif be in ["onnxruntime"]:
+                github_organization = "https://github.com/xiejibing"
             else:
                 github_organization = FLAGS.github_organization
 
