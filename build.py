@@ -1239,6 +1239,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Common dependencies. FIXME (can any of these be conditional? For
 # example libcurl only needed for GCS?)
 RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get dist-upgrade -y && \
     apt-get install -y --no-install-recommends \
             software-properties-common \
             libb64-0d \
