@@ -1059,6 +1059,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install docker docker buildx
 RUN apt-get update \\
+      && apt-get upgrade -y --no-install-recommends \\
       && apt-get install -y ca-certificates curl gnupg \\
       && install -m 0755 -d /etc/apt/keyrings \\
       && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \\
@@ -1369,6 +1370,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Common dependencies. FIXME (can any of these be conditional? For
 # example libcurl only needed for GCS?)
 RUN apt-get update \\
+      && apt-get upgrade -y --no-install-recommends \\
       && apt-get install -y --no-install-recommends \\
               clang \\
               curl \\
